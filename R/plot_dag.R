@@ -16,15 +16,25 @@
 #'
 translate_dagitty <- function(model) {
 
+
     if (length(model$nodes) == 1)
         return(paste0("dag{ ", model$statement, " }"))
 
     dag <- model$dag
+    children <- dag$children
+    parents  <- dag$parent
+
     inner <- paste(paste0(apply(dag, 1, paste, collapse = " -> "), collapse = " ; "), collapse = "")
 
     if (!is.null(model$P) && !is.null(model$confounds_df) && all(!is.na(model$confounds_df))) {
         conf_df <- model$confounds_df
         inner <- paste(inner, " ; ", paste(paste(conf_df[, 1], conf_df[, 2], sep = " <-> "), collapse = " ; "))
+    }
+
+    if(any(children  == "")){
+        isolates <- parents[children == ""]
+        dag      <- filter(dag, children != "")
+        inner    <- paste(inner, " ; ", paste0(isolates, collapse = " ; "))
     }
 
     dagitty_dag <- paste0("dag{ ", inner, " }")

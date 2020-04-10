@@ -15,6 +15,8 @@
 #' @param add_causal_types Logical. Whether to dreate and attach causal types to \code{model}. Defaults to `TRUE`.
 #' @export
 #'
+#' @importFrom dplyr filter select
+#' @importFrom dagitty dagitty edges children parents
 #' @return An object of class \code{causal_model} containing a DAG.
 #' @examples
 #' make_model(statement = "X -> Y")
@@ -52,19 +54,29 @@ make_model <- function(statement, add_causal_types = TRUE){
 	if(length(statement) != 1) stop("The length of the character vector of the statement is unequal to 1. Please provide only 1 causal model.")
 
 	if(!(is.character(statement))) stop("The model statement should be of type character.")
+  isolates   <- statement
+	dgitty     <- dagitty(paste0("dag{", statement, "}"))
+	d_nodes    <- names(dgitty)
+	d_children <- children(dgitty, d_nodes)
+	d_parents  <- parents(dgitty, d_nodes)
+	isolates   <- d_nodes[!d_nodes %in% c(d_children, d_parents)]
 
-	x <- dagitty::edges(dagitty::dagitty(	paste0("dag{", statement, "}"))) %>%
-		data.frame(stringsAsFactors = FALSE)
+	x <- edges(dgitty) %>%
+			 data.frame(stringsAsFactors = FALSE)
 
-	if(nrow(x)==0){ dag <- data.frame(v = statement, w = NA)
+	if(nrow(x)==0){ dag <- data.frame(v = isolates, w = "")
 	} else {
 	dag  <- x %>%
-		dplyr::filter(e=="->") %>%
-		dplyr::select(v,w)
+		filter(e=="->") %>%
+		select(v,w)
+	# Update to allow isolates
+	if(length(isolates) != 0){
+		dag <- dplyr::add_row(dag, v = isolates, w = "")
+	}
 	}
 
-	if(length(x)>0 && any(!(unlist(x[,1:2]) %in% unlist(dag))))
-		stop("Graph should not contain isolates.")
+ 	 # if(length(x)>0 && any(!(unlist(x[,1:2]) %in% unlist(dag))))
+ 	 # 	stop("Graph should not contain isolates.")
 
 	names(dag) <- c("parent", "children")
 
@@ -73,6 +85,7 @@ make_model <- function(statement, add_causal_types = TRUE){
 #	if(any(grepl("[.]", node_names))) stop("No dots in varnames please; try underscore?")
 	if(any(grepl("-", 	node_names))) stop("No hyphens in varnames please; try dots?")
 	if(any(grepl("_", node_names))) stop("No underscores in varnames please; try dots?")
+
 
 	# Procedure for unique ordering of nodes
 	if(all(dag$parent %in% dag$children)) stop("No root nodes provided.")
@@ -90,10 +103,16 @@ make_model <- function(statement, add_causal_types = TRUE){
 
   dag <- dag[order(gen, dag[,1], dag[,2]),]
 
+
+
+
  endog_node <- as.character(rev(unique(rev(dag$children))))
  if(all(is.na(endog_node))) endog_node <- NULL
  .exog_node <- as.character(rev(unique(rev(dag$parent))))
  exog_node  <- .exog_node[!(.exog_node %in% endog_node)]
+
+ #edit to allow isolates
+ endog_node <- endog_node[endog_node != ""]
 
  nodes <- c(exog_node, endog_node)
 
@@ -109,12 +128,12 @@ make_model <- function(statement, add_causal_types = TRUE){
  lgths <- lapply(nodal_types, length) %>% unlist
 
  model$parameters_df <- data.frame(
- 	param_names  = unlist(sapply(1:m, function(i) paste0(names(nodal_types[i]), ".", nodal_types[i][[1]]))),
- 	param_value   = unlist(sapply(1:m, function(j) rep(1/length(nodal_types[[j]]), length(nodal_types[[j]])))),
- 	param_set    = unlist(sapply(1:m, function(j) rep(names(nodal_types)[j], length(nodal_types[[j]])))),
- 	node = unlist(sapply(1:m, function(j) rep(names(nodal_types)[j], length(nodal_types[[j]])))),
+ 	param_names  = unlist(lapply(1:m, function(i) paste0(names(nodal_types[i]), ".", nodal_types[i][[1]]))),
+ 	param_value   = unlist(lapply(1:m, function(j) rep(1/length(nodal_types[[j]]), length(nodal_types[[j]])))),
+ 	param_set    = unlist(lapply(1:m, function(j) rep(names(nodal_types)[j], length(nodal_types[[j]])))),
+ 	node = unlist(lapply(1:m, function(j) rep(names(nodal_types)[j], length(nodal_types[[j]])))),
   # param        = unlist(sapply(1:m, function(i) nodal_types[i][[1]])),
-  nodal_type = unlist(sapply(1:m, function(i) nodal_types[i][[1]])),
+  nodal_type = unlist(lapply(1:m, function(i) nodal_types[i][[1]])),
   gen = rep(1:m, lgths),
   priors       = 1,
   stringsAsFactors = FALSE
