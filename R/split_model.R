@@ -5,9 +5,7 @@ split_model(model, data){
   n_nodes <- length(nodes)
   parents <- CausalQueries:::get_parents(model)
   confound <- !is.null(model$confounds_df)
-
-
-
+  dag <- model$dag
   if(confound){
     confounds_df <- model$confounds_df
   }
@@ -23,15 +21,22 @@ split_model(model, data){
       filter_args <- c(filter_args, out$filter_args )
     }
     missing_parents <- unique(c(missing_parents, get_missing_parents()))
-    end_nodes_i <-  missing_parents[length(missing_parents)]
+    end_nodes_i     <-  missing_parents[length(missing_parents)]
     missing_parents <- missing_parents[1:(length(missing_parents))]
     if(is.null(missing_parents)){
       keep_going <- FALSE
 
       submodel <- create_submodel()
     }
-    submodel$nodes %in% nodes
-    end_node
+
+    # identify the  sub_model$dag that matches with dag and remove those lines
+     # from dag...
+    # from there get parents and not
+    a <- t(apply(dag, 1, function(x) submodel$dag == x))
+    b <- c(apply(a, 1, all))
+    dag <- dag[!b,]
+    nodes <- unique(unlist(dag ))
+    parents <- dag$parent
   }
 
 
